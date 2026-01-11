@@ -2,12 +2,13 @@ import streamlit as st
 from typing import Optional, Literal
 from pydantic import BaseModel, Field
 from agno.agent import Agent
-# from agno.models.openai import OpenAIChat
 from agno.models.google import Gemini
 from agno.tools.yfinance import YFinanceTools
 from dotenv import load_dotenv
 
+# ---------------------------------
 # Load environment variables
+# ---------------------------------
 load_dotenv()
 
 # ---------------------------------
@@ -43,7 +44,6 @@ def load_agent():
         tools=[
             YFinanceTools(
                 # stock_price=True,
-                # technical_indicators=True,
                 # historical_prices=True,
             )
         ],
@@ -78,6 +78,14 @@ option_type = st.selectbox(
     ["CALL", "PUT"]
 )
 
+# ✅ Custom Question Input
+st.markdown("### ✍️ Ask your own question")
+custom_question = st.text_area(
+    "Custom market question (optional)",
+    placeholder="Eg: Is Bank Nifty bullish today? Should I buy 46000 CE?",
+    height=90
+)
+
 analyze_btn = st.button("🔍 Analyze Market")
 
 # ---------------------------------
@@ -86,9 +94,15 @@ analyze_btn = st.button("🔍 Analyze Market")
 if analyze_btn:
     with st.spinner("Analyzing market data..."):
         try:
-            prompt = (
-                f"Analyze {index} and recommend a {option_type} option strike price"
-            )
+            # ✅ Smart prompt selection
+            if custom_question.strip():
+                prompt = custom_question.strip()
+            else:
+                prompt = f"Analyze {index} and recommend a {option_type} option strike price"
+
+            # Show question sent to AI
+            st.markdown("### 🧠 Question Sent to AI")
+            st.code(prompt)
 
             response = agent.run(prompt, stream=False)
 
@@ -96,24 +110,28 @@ if analyze_btn:
                 st.success("Analysis Complete")
 
                 st.markdown("### 📈 Market Summary")
-                st.write(response.content["summary"])
+                st.write(response.content.summary)
 
                 st.markdown("### 🎯 Trade Recommendation")
                 st.metric(
                     label="Entry Signal",
-                    value=response.content["entry_type"] or "NO TRADE"
+                    value=response.content.entry_type or "NO TRADE"
                 )
 
                 st.metric(
                     label="Recommended Strike Price",
-                    value=response.content["strike_price"]
+                    value=response.content.strike_price
                 )
 
                 st.markdown("---")
-                st.warning(
-                    "⚠️ **Disclaimer:** This is AI-generated analysis for educational "
-                    "purposes only. Not financial advice."
-                )
+                with st.expander("⚠️ Risk Disclaimer"):
+                    st.write(
+                        """
+                        This AI-generated analysis is for **educational purposes only**.
+                        Options trading involves significant risk.
+                        Do not use this as financial advice.
+                        """
+                    )
             else:
                 st.error("No response received from the agent.")
 
