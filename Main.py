@@ -23,6 +23,72 @@ st.title("📊 NSE Index Options Analyst")
 st.caption("AI-powered technical analysis for NIFTY & Bank Nifty options")
 
 # ---------------------------------
+# Technical Indicators Dictionary
+# ---------------------------------
+INDICATORS = {
+    "🟢 Candlestick - Bullish": [
+        "Bullish Abandoned Baby",
+        "Bullish Engulfing Pattern",
+        "Bullish Harami",
+        "Bullish Harami Cross",
+        "Bullish Kicking",
+        "Dragonfly Doji",
+        "Hammer",
+        "Inverted Hammer",
+        "Morning Star",
+        "Piercing Line",
+        "Three White Soldiers",
+        "Upside Tasuki Gap",
+        "White Marubozu"
+    ],
+    "🔴 Candlestick - Bearish": [
+        "Abandoned Baby Top",
+        "Bearish Engulfing",
+        "Bearish Harami",
+        "Bearish Harami Cross",
+        "Black Marubozu",
+        "Dark Cloud Cover",
+        "Downside Tasuki Gap",
+        "Hanging Man",
+        "Identical Three Crows",
+        "Shooting Star"
+    ],
+    "🟢 Moving Average - Bullish": [
+        "Golden Cross (50D SMA > 200D SMA)",
+        "Positive Breakouts – Long Trend (LTP > 200D SMA)",
+        "Positive Breakouts – Medium Trend (LTP > 50D SMA)",
+        "Positive Breakouts – Short Trend (LTP > 30D SMA)"
+    ],
+    "🔴 Moving Average - Bearish": [
+        "Death Cross (50D SMA < 200D SMA)",
+        "Negative Breakouts – Long Trend (LTP < 200D SMA)",
+        "Negative Breakouts – Medium Trend (LTP < 50D SMA)",
+        "Negative Breakouts – Short Trend (LTP < 30D SMA)"
+    ],
+    "🟢 Technical - Bullish": [
+        "LTP > 20% from Week Low",
+        "MACD Crosses Above 0 Line",
+        "MACD Crossover Above",
+        "MFI Overbought",
+        "RSI and MFI Overbought",
+        "RSI Bullish",
+        "SMA Crossover (30D SMA > 200D SMA)"
+    ],
+    "🔴 Technical - Bearish": [
+        "MACD Crosses Below 0 Line",
+        "MACD Crossover Below",
+        "MFI Oversold",
+        "RSI and MFI Oversold",
+        "RSI Bearish"
+    ]
+}
+
+# Flatten all indicators for multi-select
+ALL_INDICATORS = []
+for category, indicators in INDICATORS.items():
+    ALL_INDICATORS.extend(indicators)
+
+# ---------------------------------
 # Output Schema
 # ---------------------------------
 class OptionsRecommendation(BaseModel):
@@ -78,6 +144,15 @@ option_type = st.selectbox(
     ["CALL", "PUT"]
 )
 
+# ✅ Multi-select for indicators
+st.markdown("### 📊 Select Technical Indicators")
+selected_indicators = st.multiselect(
+    "Choose indicators to analyze (leave empty for default analysis)",
+    options=ALL_INDICATORS,
+    default=[],
+    help="Select specific indicators or leave empty to use all standard indicators"
+)
+
 # ✅ Custom Question Input
 st.markdown("### ✍️ Ask your own question")
 custom_question = st.text_area(
@@ -97,8 +172,14 @@ if analyze_btn:
             # ✅ Smart prompt selection
             if custom_question.strip():
                 prompt = custom_question.strip()
+                if selected_indicators:
+                    prompt += f"\n\nFocus on these indicators: {', '.join(selected_indicators)}"
             else:
-                prompt = f"Analyze {index} and recommend a {option_type} option strike price"
+                if selected_indicators:
+                    indicator_list = ', '.join(selected_indicators)
+                    prompt = f"Analyze {index} and recommend a {option_type} option strike price using these technical indicators: {indicator_list}"
+                else:
+                    prompt = f"Analyze {index} and recommend a {option_type} option strike price using standard technical indicators (RSI, MACD, EMA, candlestick patterns, moving averages)."
 
             # Show question sent to AI
             st.markdown("### 🧠 Question Sent to AI")
