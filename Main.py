@@ -83,11 +83,6 @@ INDICATORS = {
     ]
 }
 
-# Flatten all indicators for multi-select
-ALL_INDICATORS = []
-for category, indicators in INDICATORS.items():
-    ALL_INDICATORS.extend(indicators)
-
 # ---------------------------------
 # Output Schema
 # ---------------------------------
@@ -132,6 +127,21 @@ def load_agent():
 agent = load_agent()
 
 # ---------------------------------
+# Build comprehensive indicators list for prompt
+# ---------------------------------
+def build_indicators_text():
+    """Build formatted text of all indicators organized by category"""
+    indicators_text = "\n\nAnalyze using these technical indicators:\n\n"
+    
+    for category, indicators in INDICATORS.items():
+        indicators_text += f"{category}:\n"
+        for indicator in indicators:
+            indicators_text += f"  - {indicator}\n"
+        indicators_text += "\n"
+    
+    return indicators_text
+
+# ---------------------------------
 # UI Controls
 # ---------------------------------
 index = st.selectbox(
@@ -144,21 +154,13 @@ option_type = st.selectbox(
     ["CALL", "PUT"]
 )
 
-# ✅ Multi-select for indicators
-st.markdown("### 📊 Select Technical Indicators")
-selected_indicators = st.multiselect(
-    "Choose indicators to analyze (leave empty for default analysis)",
-    options=ALL_INDICATORS,
-    default=[],
-    help="Select specific indicators or leave empty to use all standard indicators"
-)
-
 # ✅ Custom Question Input
-st.markdown("### ✍️ Ask your own question")
+st.markdown("### ✍️ Ask your own question (optional)")
 custom_question = st.text_area(
-    "Custom market question (optional)",
+    "Custom market question",
     placeholder="Eg: Is Bank Nifty bullish today? Should I buy 46000 CE?",
-    height=90
+    height=90,
+    help="Leave empty for standard analysis with all indicators"
 )
 
 analyze_btn = st.button("🔍 Analyze Market")
@@ -169,21 +171,18 @@ analyze_btn = st.button("🔍 Analyze Market")
 if analyze_btn:
     with st.spinner("Analyzing market data..."):
         try:
-            # ✅ Smart prompt selection
+            # ✅ Build prompt with all indicators included
+            indicators_text = build_indicators_text()
+            
             if custom_question.strip():
-                prompt = custom_question.strip()
-                if selected_indicators:
-                    prompt += f"\n\nFocus on these indicators: {', '.join(selected_indicators)}"
+                prompt = custom_question.strip() + indicators_text
             else:
-                if selected_indicators:
-                    indicator_list = ', '.join(selected_indicators)
-                    prompt = f"Analyze {index} and recommend a {option_type} option strike price using these technical indicators: {indicator_list}"
-                else:
-                    prompt = f"Analyze {index} and recommend a {option_type} option strike price using standard technical indicators (RSI, MACD, EMA, candlestick patterns, moving averages)."
+                prompt = f"Analyze {index} and recommend a {option_type} option strike price.{indicators_text}"
 
             # Show question sent to AI
             st.markdown("### 🧠 Question Sent to AI")
-            st.code(prompt)
+            with st.expander("View Full Prompt"):
+                st.code(prompt)
 
             response = agent.run(prompt, stream=False)
 
