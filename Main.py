@@ -1,219 +1,137 @@
-import streamlit as st
-from typing import Optional, Literal
-from pydantic import BaseModel, Field
-from agno.agent import Agent
-from agno.models.google import Gemini
-from agno.tools.yfinance import YFinanceTools
-from dotenv import load_dotenv
+# ============================
+# AI MARKET DECISION ENGINE
+# Single-file Streamlit App
+# ============================
 
-# ---------------------------------
-# Load environment variables
-# ---------------------------------
+import streamlit as st
+from agno.agent import Agent, RunOutput
+from agno.models.google import Gemini
+from agno.tools.duckduckgo import DuckDuckGoTools
+from agno.utils.pprint import pprint_run_response
+from dotenv import load_dotenv
 load_dotenv()
 
-# ---------------------------------
-# Streamlit Page Config
-# ---------------------------------
+
+# ============================
+# STREAMLIT CONFIG
+# ============================
+
 st.set_page_config(
-    page_title="NSE Index Options Analyst",
-    layout="centered"
+    page_title="AI Market Decision Engine",
+    layout="wide",
 )
 
-st.title("📊 NSE Index Options Analyst")
-st.caption("AI-powered technical analysis for NIFTY & Bank Nifty options")
+st.title("📈 AI Indian Stock Market Decision Engine")
+st.caption("NIFTY • SENSEX • Options • MCX • News-Driven AI")
 
-# ---------------------------------
-# Technical Indicators Dictionary
-# ---------------------------------
-INDICATORS = {
-    "🟢 Candlestick - Bullish": [
-        "Bullish Abandoned Baby",
-        "Bullish Engulfing Pattern",
-        "Bullish Harami",
-        "Bullish Harami Cross",
-        "Bullish Kicking",
-        "Dragonfly Doji",
-        "Hammer",
-        "Inverted Hammer",
-        "Morning Star",
-        "Piercing Line",
-        "Three White Soldiers",
-        "Upside Tasuki Gap",
-        "White Marubozu"
+
+# ============================
+# AGENT DEFINITION
+# ============================
+
+market_decision_agent = Agent(
+    name="Indian Market Decision Agent",
+    model=Gemini(id="gemini-2.0-flash-001"),
+    tools=[DuckDuckGoTools()],
+    instructions=[
+        "You are a professional Indian stock market strategist.",
+        "Analyze today's Indian stock market using real-time information.",
+        "",
+        "Markets to analyze:",
+        "- NIFTY 50",
+        "- SENSEX",
+        "- Top gainers and losers",
+        "- Options market (OI, PCR, Max Pain)",
+        "- MCX commodities (Gold, Crude Oil)",
+        "- Global cues and market news",
+        "",
+        "You MUST give ONE clear decision:",
+        "BUY, SELL, HOLD, or NO_TRADE.",
+        "",
+        "STRICT OUTPUT FORMAT (do not change):",
+        "",
+        "ACTION: <BUY | SELL | HOLD | NO_TRADE>",
+        "CONFIDENCE: <0-100>%",
+        "MARKET_SENTIMENT: <Bullish | Bearish | Neutral>",
+        "RISK_LEVEL: <Low | Medium | High>",
+        "",
+        "ANALYSIS:",
+        "- Index trend",
+        "- Sector performance",
+        "- Options data",
+        "- Commodities update",
+        "- News impact",
+        "",
+        "REASONING:",
+        "- Why this action",
+        "- Why not others",
+        "",
+        "DISCLAIMER:",
+        "- Educational purpose only",
+        "",
+        "Be decisive, structured, and concise.",
+        "Always cite sources.",
+        "Respond in MARKDOWN format.",
+        "Never refuse to answer.",
+        "Use tools as needed to get real-time data.",
+        "Stay updated with the latest market info.",
+        "Provide actionable insights.",
+        "Try give response within 500 words.",
+        "try to give accurate result as much as possible.",
+        "based on ur result user going to take trade decision.",
     ],
-    "🔴 Candlestick - Bearish": [
-        "Abandoned Baby Top",
-        "Bearish Engulfing",
-        "Bearish Harami",
-        "Bearish Harami Cross",
-        "Black Marubozu",
-        "Dark Cloud Cover",
-        "Downside Tasuki Gap",
-        "Hanging Man",
-        "Identical Three Crows",
-        "Shooting Star"
-    ],
-    "🟢 Moving Average - Bullish": [
-        "Golden Cross (50D SMA > 200D SMA)",
-        "Positive Breakouts – Long Trend (LTP > 200D SMA)",
-        "Positive Breakouts – Medium Trend (LTP > 50D SMA)",
-        "Positive Breakouts – Short Trend (LTP > 30D SMA)"
-    ],
-    "🔴 Moving Average - Bearish": [
-        "Death Cross (50D SMA < 200D SMA)",
-        "Negative Breakouts – Long Trend (LTP < 200D SMA)",
-        "Negative Breakouts – Medium Trend (LTP < 50D SMA)",
-        "Negative Breakouts – Short Trend (LTP < 30D SMA)"
-    ],
-    "🟢 Technical - Bullish": [
-        "LTP > 20% from Week Low",
-        "MACD Crosses Above 0 Line",
-        "MACD Crossover Above",
-        "MFI Overbought",
-        "RSI and MFI Overbought",
-        "RSI Bullish",
-        "SMA Crossover (30D SMA > 200D SMA)"
-    ],
-    "🔴 Technical - Bearish": [
-        "MACD Crosses Below 0 Line",
-        "MACD Crossover Below",
-        "MFI Oversold",
-        "RSI and MFI Oversold",
-        "RSI Bearish"
-    ]
-}
-
-# ---------------------------------
-# Output Schema
-# ---------------------------------
-class OptionsRecommendation(BaseModel):
-    summary: str = Field(..., description="Brief technical analysis summary")
-    strike_price: float = Field(..., description="Recommended option strike price")
-    entry_type: Optional[Literal["BUY", "SELL"]] = Field(
-        default=None,
-        description="Trade signal or None if market is sideways"
-    )
-
-# ---------------------------------
-# Initialize Agent (cached)
-# ---------------------------------
-@st.cache_resource
-def load_agent():
-    return Agent(
-        name="Index Options Analyst",
-        model=Gemini(id="gemini-2.0-flash"),
-        tools=[
-            YFinanceTools(
-                # stock_price=True,
-                # historical_prices=True,
-            )
-        ],
-        description=(
-            "Expert NSE index options analyst focused on NIFTY and Bank Nifty."
-        ),
-        instructions=[
-            "Analyze NIFTY (^NSEI) and Bank Nifty using trend, RSI, MACD, EMA.",
-            "Identify bullish, bearish, or sideways market structure.",
-            "For CALL options → bullish trend only.",
-            "For PUT options → bearish trend only.",
-            "ATM strikes must be rounded to nearest 50 (NIFTY) or 100 (Bank Nifty).",
-            "Avoid trade if market is sideways or signals conflict.",
-            "Always include a risk disclaimer.",
-        ],
-        output_schema=OptionsRecommendation,
-        markdown=True,
-    )
-
-agent = load_agent()
-
-# ---------------------------------
-# Build comprehensive indicators list for prompt
-# ---------------------------------
-def build_indicators_text():
-    """Build formatted text of all indicators organized by category"""
-    indicators_text = "\n\nAnalyze using these technical indicators:\n\n"
-    
-    for category, indicators in INDICATORS.items():
-        indicators_text += f"{category}:\n"
-        for indicator in indicators:
-            indicators_text += f"  - {indicator}\n"
-        indicators_text += "\n"
-    
-    return indicators_text
-
-# ---------------------------------
-# UI Controls
-# ---------------------------------
-index = st.selectbox(
-    "Select Index",
-    ["NIFTY 50", "BANK NIFTY"]
+    markdown=True,
+    # show_tool_calls=True,
 )
 
-option_type = st.selectbox(
-    "Select Option Type",
-    ["CALL", "PUT"]
+
+# ============================
+# UI INPUT
+# ============================
+
+query = st.text_input(
+    "Market Query",
+    value="Analyze today's Indian stock market and give a trade decision"
 )
 
-# ✅ Custom Question Input
-st.markdown("### ✍️ Ask your own question (optional)")
-custom_question = st.text_area(
-    "Custom market question",
-    placeholder="Eg: Is Bank Nifty bullish today? Should I buy 46000 CE?",
-    height=90,
-    help="Leave empty for standard analysis with all indicators"
-)
+col1, col2 = st.columns([1, 3])
+with col1:
+    analyze_btn = st.button("🚀 Analyze Market")
 
-analyze_btn = st.button("🔍 Analyze Market")
 
-# ---------------------------------
-# Run Analysis
-# ---------------------------------
+# ============================
+# AGENT EXECUTION
+# ============================
+
 if analyze_btn:
-    with st.spinner("Analyzing market data..."):
-        try:
-            # ✅ Build prompt with all indicators included
-            indicators_text = build_indicators_text()
-            
-            if custom_question.strip():
-                prompt = custom_question.strip() + indicators_text
-            else:
-                prompt = f"Analyze {index} and recommend a {option_type} option strike price.{indicators_text}"
+    with st.spinner("🔍 AI is analyzing market conditions..."):
+        response: RunOutput = market_decision_agent.run(
+            query,
+            # stream=True
+        )
+    st.markdown(
+        response.content
+    )
+    st.success("✅ Market Analysis Completed")
 
-            # Show question sent to AI
-            st.markdown("### 🧠 Question Sent to AI")
-            with st.expander("View Full Prompt"):
-                st.code(prompt)
+    # ============================
+    # OUTPUT
+    # ============================
 
-            response = agent.run(prompt, stream=False)
+    # pprint_run_response(response, markdown=True)
 
-            if response and response.content:
-                st.success("Analysis Complete")
+    st.divider()
 
-                st.markdown("### 📈 Market Summary")
-                st.write(response.content.summary)
+    st.warning(
+        "⚠️ DISCLAIMER: This AI analysis is for educational purposes only. "
+        "Not SEBI-registered investment advice."
+    )
 
-                st.markdown("### 🎯 Trade Recommendation")
-                st.metric(
-                    label="Entry Signal",
-                    value=response.content.entry_type or "NO TRADE"
-                )
 
-                st.metric(
-                    label="Recommended Strike Price",
-                    value=response.content.strike_price
-                )
+# ============================
+# FOOTER
+# ============================
 
-                st.markdown("---")
-                with st.expander("⚠️ Risk Disclaimer"):
-                    st.write(
-                        """
-                        This AI-generated analysis is for **educational purposes only**.
-                        Options trading involves significant risk.
-                        Do not use this as financial advice.
-                        """
-                    )
-            else:
-                st.error("No response received from the agent.")
-
-        except Exception as e:
-            st.error(f"Error: {str(e)}")
+st.caption(
+    "Built with Agno Agents • Gemini AI • DuckDuckGo Search • Streamlit"
+)
