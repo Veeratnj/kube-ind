@@ -159,5 +159,5 @@ if user_query:
 
             result = agent.run(f"user query is {user_query}. Provide a detailed trading decision using our tools & market knowledge.")
 
-        st.markdown(result)
+        st.markdown(result.content)
         st.session_state.messages.append({"role": "assistant", "content": result.content})
